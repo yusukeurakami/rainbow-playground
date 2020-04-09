@@ -16,6 +16,8 @@ from env import Env
 from memory import ReplayMemory
 from test import test
 
+from tensorboardX import SummaryWriter
+
 
 # Note that hyperparameters may originally be reported in ATARI game frames instead of agent steps
 parser = argparse.ArgumentParser(description='Rainbow')
@@ -46,7 +48,7 @@ parser.add_argument('--adam-eps', type=float, default=1.5e-4, metavar='ε', help
 parser.add_argument('--batch-size', type=int, default=32, metavar='SIZE', help='Batch size')
 parser.add_argument('--learn-start', type=int, default=int(20e3), metavar='STEPS', help='Number of steps before starting training')
 parser.add_argument('--evaluate', action='store_true', help='Evaluate only')
-parser.add_argument('--evaluation-interval', type=int, default=100000, metavar='STEPS', help='Number of training steps between evaluations')
+parser.add_argument('--evaluation-interval', type=int, default=1000, metavar='STEPS', help='Number of training steps between evaluations')
 parser.add_argument('--evaluation-episodes', type=int, default=10, metavar='N', help='Number of evaluation episodes to average over')
 # TODO: Note that DeepMind's evaluation method is running the latest agent for 500K frames ever every 1M steps
 parser.add_argument('--evaluation-size', type=int, default=500, metavar='N', help='Number of transitions to use for validating Q')
@@ -62,7 +64,7 @@ args = parser.parse_args()
 print(' ' * 26 + 'Options')
 for k, v in vars(args).items():
   print(' ' * 26 + k + ': ' + str(v))
-results_dir = os.path.join('results', args.id)
+results_dir = os.path.join('results-dev', args.game, args.id)
 if not os.path.exists(results_dir):
   os.makedirs(results_dir)
 metrics = {'steps': [], 'rewards': [], 'Qs': [], 'best_avg_reward': -float('inf')}
@@ -72,8 +74,13 @@ if torch.cuda.is_available() and not args.disable_cuda:
   args.device = torch.device('cuda')
   torch.cuda.manual_seed(np.random.randint(1, 10000))
   torch.backends.cudnn.enabled = args.enable_cudnn
+  print("using cuda")
 else:
   args.device = torch.device('cpu')
+  print("using cpu")
+
+# prepare summary writer
+sw = SummaryWriter(results_dir)
 
 
 # Simple ISO 8601 timestamped logger
@@ -166,6 +173,8 @@ else:
         dqn.eval()  # Set DQN (online network) to evaluation mode
         avg_reward, avg_Q = test(args, T, dqn, val_mem, metrics, results_dir)  # Test
         log('T = ' + str(T) + ' / ' + str(args.T_max) + ' | Avg. reward: ' + str(avg_reward) + ' | Avg. Q: ' + str(avg_Q))
+        sw.add_scalar("train/avg_reward", avg_reward, T)
+        sw.add_scalar("train/avg_Q", avg_Q, T)
         dqn.train()  # Set DQN (online network) back to training mode
 
         # If memory path provided, save it
